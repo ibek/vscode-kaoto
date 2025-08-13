@@ -7,10 +7,15 @@ type TraceOpenArgs = {
 	status: string;
 };
 
+type ExchangeEvent = { timestamp: string; step: string; status: string; headers: Record<string, string>; body: string; exchangeId: string };
 type AppState = {
 	ctx?: TraceOpenArgs;
-	exchanges: Array<{ id: string; ts: number }>;
+	// grouped by exchangeId
+	byExchange: Record<string, ExchangeEvent[]>;
+	// UI
+	expanded: Record<string, boolean>;
 	selectedExchangeId?: string;
+	selectedIndex?: number;
 };
 
 const vscode = acquireVsCodeApi();
@@ -31,6 +36,22 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Record<string,
 		else el.append(c);
 	}
 	return el;
+}
+
+function renderDetails(ev: ExchangeEvent) {
+	return h(
+		'div',
+		{},
+		h('div', {}, `${ev.timestamp} — ${ev.step}`),
+		h('div', { style: 'margin-top:.25rem; font-weight:600' }, 'Headers'),
+		h(
+			'ul',
+			{ className: 'list' },
+			Object.entries(ev.headers).map(([k, v]) => h('li', {}, `${k}: ${v}`)),
+		),
+		h('div', { style: 'margin-top:.25rem; font-weight:600' }, 'Body'),
+		h('pre', {}, ev.body || '(empty)'),
+	);
 }
 
 function render(state: AppState) {
@@ -67,19 +88,48 @@ function render(state: AppState) {
 			h(
 				'ul',
 				{ className: 'list' },
-				state.exchanges.map((ex) =>
-					h(
-						'li',
-						{
-							className: state.selectedExchangeId === ex.id ? 'active' : '',
-							onClick: () => {
-								state.selectedExchangeId = ex.id;
-								render(state);
-							},
-						},
-						`${ex.id} • ${new Date(ex.ts).toLocaleTimeString()}`,
+				Object.keys(state.byExchange)
+					.filter((exId) => !!exId && exId.trim().length > 0)
+					.map((exId) =>
+						h(
+							'li',
+							{},
+							h(
+								'div',
+								{
+									onClick: () => {
+										state.expanded[exId] = !state.expanded[exId];
+										state.selectedExchangeId = exId;
+										state.selectedIndex = undefined;
+										render(state);
+									},
+									className: state.selectedExchangeId === exId ? 'active' : '',
+								},
+								`${state.expanded[exId] ? '▾' : '▸'} ${exId}`,
+							),
+							state.expanded[exId]
+								? h(
+										'ul',
+										{ className: 'list', style: 'margin-left: 0.75rem' },
+										state.byExchange[exId].map((ev, idx) =>
+											h(
+												'li',
+												{
+													className: state.selectedExchangeId === exId && state.selectedIndex === idx ? 'active' : '',
+													onClick: (e: MouseEvent) => {
+														e.stopPropagation();
+														state.selectedExchangeId = exId;
+														state.selectedIndex = idx;
+														render(state);
+													},
+												},
+												`${ev.step}`,
+											),
+										),
+									)
+								: undefined,
+						),
 					),
-				),
 			),
 		),
 	);
@@ -91,7 +141,9 @@ function render(state: AppState) {
 		h(
 			'div',
 			{ className: 'body', id: 'details' },
-			state.selectedExchangeId ? `Details for ${state.selectedExchangeId}` : 'Select an exchange to see details',
+			state.selectedExchangeId && state.selectedIndex !== undefined
+				? renderDetails(state.byExchange[state.selectedExchangeId][state.selectedIndex])
+				: 'Select an exchange to see details',
 		),
 	);
 
@@ -100,7 +152,7 @@ function render(state: AppState) {
 	root.append(app);
 }
 
-const state: AppState = { exchanges: [] };
+const state: AppState = { byExchange: {}, expanded: {} } as AppState;
 render(state);
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -113,14 +165,17 @@ window.addEventListener('message', (event: MessageEvent) => {
 			break;
 		}
 		case 'trace/clear': {
-			state.exchanges = [];
+			state.byExchange = {};
+			state.expanded = {};
 			state.selectedExchangeId = undefined;
+			state.selectedIndex = undefined;
 			render(state);
 			break;
 		}
 		case 'trace/appendEvent': {
-			const ev = msg.payload as { exchangeId: string; ts: number };
-			state.exchanges.push({ id: ev.exchangeId, ts: ev.ts });
+			const ev = msg.payload as ExchangeEvent;
+			if (!state.byExchange[ev.exchangeId]) state.byExchange[ev.exchangeId] = [];
+			state.byExchange[ev.exchangeId].push(ev);
 			render(state);
 			break;
 		}

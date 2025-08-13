@@ -41,6 +41,7 @@ import { RouteOperation } from '../helpers/CamelJBang';
 import { RecommendationCore } from '@redhat-developer/vscode-extension-proposals';
 import { TracePanel, TraceOpenArgs } from '../trace/TracePanel';
 import { TraceManager } from '../trace/TraceManager';
+import { DumpParser } from '../trace/DumpParser';
 
 export class ExtensionContextHandler {
 	protected kieEditorStore: KogitoVsCode.VsCodeKieEditorStore;
@@ -337,19 +338,34 @@ export class ExtensionContextHandler {
 			vscode.commands.registerCommand('trace/stop', async (integrationId?: string) => {
 				if (!integrationId) return;
 				await traceManager.stop(integrationId);
+				const p = parserByIntegration.get(integrationId);
+				if (p) {
+					p.done();
+					parserByIntegration.delete(integrationId);
+				}
 				TracePanel.getInstance(this.context).post('trace/status', { integrationId, status: 'stopped' });
 			}),
 		);
 		this.context.subscriptions.push(
 			vscode.commands.registerCommand('trace/clear', async (integrationId?: string) => {
 				if (!integrationId) return;
+				parserByIntegration.delete(integrationId);
 				TracePanel.getInstance(this.context).post('trace/clear', { integrationId });
 			}),
 		);
 
-		// forward appended lines to the webview as events
+		// forward parsed events to the webview
+		const parserByIntegration = new Map<string, DumpParser>();
 		traceManager.onDidAppendLine(({ integrationId, line }) => {
-			TracePanel.getInstance(this.context).post('trace/appendEvent', { integrationId, exchangeId: integrationId, ts: Date.now(), raw: line });
+			let parser = parserByIntegration.get(integrationId);
+			if (!parser) {
+				parser = new DumpParser((ev) => {
+					// When an event completes, send it to the webview
+					TracePanel.getInstance(this.context).post('trace/appendEvent', ev);
+				});
+				parserByIntegration.set(integrationId, parser);
+			}
+			parser.feed(line);
 		});
 	}
 
