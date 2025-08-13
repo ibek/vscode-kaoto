@@ -121,6 +121,11 @@ export class TracePanel {
 		});
 	}
 
+	public post(type: string, payload?: unknown): void {
+		if (!this.panel) return;
+		this.panel.webview.postMessage({ type, payload });
+	}
+
 	public switchContext(args: TraceOpenArgs): void {
 		this.currentIntegration = args;
 		this.updateWebview();

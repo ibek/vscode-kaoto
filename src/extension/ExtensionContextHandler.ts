@@ -40,6 +40,7 @@ import { CamelRouteOperationJBangTask } from '../tasks/CamelRouteOperationJBangT
 import { RouteOperation } from '../helpers/CamelJBang';
 import { RecommendationCore } from '@redhat-developer/vscode-extension-proposals';
 import { TracePanel, TraceOpenArgs } from '../trace/TracePanel';
+import { TraceManager } from '../trace/TraceManager';
 
 export class ExtensionContextHandler {
 	protected kieEditorStore: KogitoVsCode.VsCodeKieEditorStore;
@@ -298,6 +299,8 @@ export class ExtensionContextHandler {
 		);
 
 		// register Trace inline action button
+		const traceManager = new TraceManager();
+		this.context.subscriptions.push(traceManager);
 		this.context.subscriptions.push(
 			vscode.commands.registerCommand(DEPLOYMENTS_INTEGRATION_TRACE_COMMAND_ID, async (arg: unknown) => {
 				let payload: TraceOpenArgs | undefined;
@@ -321,6 +324,33 @@ export class ExtensionContextHandler {
 				await this.sendCommandTrackingEvent(DEPLOYMENTS_INTEGRATION_TRACE_COMMAND_ID);
 			}),
 		);
+
+		// wire internal trace commands used by the webview
+		this.context.subscriptions.push(
+			vscode.commands.registerCommand('trace/start', async (integrationId?: string) => {
+				if (!integrationId) return;
+				await traceManager.start(integrationId);
+				TracePanel.getInstance(this.context).post('trace/status', { integrationId, status: 'running' });
+			}),
+		);
+		this.context.subscriptions.push(
+			vscode.commands.registerCommand('trace/stop', async (integrationId?: string) => {
+				if (!integrationId) return;
+				await traceManager.stop(integrationId);
+				TracePanel.getInstance(this.context).post('trace/status', { integrationId, status: 'stopped' });
+			}),
+		);
+		this.context.subscriptions.push(
+			vscode.commands.registerCommand('trace/clear', async (integrationId?: string) => {
+				if (!integrationId) return;
+				TracePanel.getInstance(this.context).post('trace/clear', { integrationId });
+			}),
+		);
+
+		// forward appended lines to the webview as events
+		traceManager.onDidAppendLine(({ integrationId, line }) => {
+			TracePanel.getInstance(this.context).post('trace/appendEvent', { integrationId, exchangeId: integrationId, ts: Date.now(), raw: line });
+		});
 	}
 
 	public registerDeploymentsRouteCommands(deploymentsProvider: DeploymentsProvider) {
