@@ -39,6 +39,7 @@ import { ChildItem } from '../views/deploymentTreeItems/ChildItem';
 import { CamelRouteOperationJBangTask } from '../tasks/CamelRouteOperationJBangTask';
 import { RouteOperation } from '../helpers/CamelJBang';
 import { RecommendationCore } from '@redhat-developer/vscode-extension-proposals';
+import { TracePanel, TraceOpenArgs } from '../trace/TracePanel';
 
 export class ExtensionContextHandler {
 	protected kieEditorStore: KogitoVsCode.VsCodeKieEditorStore;
@@ -274,6 +275,7 @@ export class ExtensionContextHandler {
 	public registerDeploymentsIntegrationCommands() {
 		const DEPLOYMENTS_INTEGRATION_STOP_COMMAND_ID: string = 'kaoto.deployments.stop';
 		const DEPLOYMENTS_INTEGRATION_LOGS_COMMAND_ID: string = 'kaoto.deployments.logs';
+		const DEPLOYMENTS_INTEGRATION_TRACE_COMMAND_ID: string = 'kaoto.trace.open';
 
 		this.context.subscriptions.push(
 			vscode.commands.registerCommand(DEPLOYMENTS_INTEGRATION_STOP_COMMAND_ID, async (integration: ParentItem) => {
@@ -292,6 +294,31 @@ export class ExtensionContextHandler {
 					KaotoOutputChannel.logWarning(`Terminal with a name "${runningLabel}" was not found.`);
 				}
 				await this.sendCommandTrackingEvent(DEPLOYMENTS_INTEGRATION_LOGS_COMMAND_ID);
+			}),
+		);
+
+		// register Trace inline action button
+		this.context.subscriptions.push(
+			vscode.commands.registerCommand(DEPLOYMENTS_INTEGRATION_TRACE_COMMAND_ID, async (arg: unknown) => {
+				let payload: TraceOpenArgs | undefined;
+				if (arg && typeof arg === 'object' && 'integrationId' in (arg as any) && 'name' in (arg as any) && 'status' in (arg as any)) {
+					payload = arg as TraceOpenArgs;
+				} else if (arg && typeof arg === 'object' && 'label' in (arg as any)) {
+					const item = arg as ParentItem;
+					payload = {
+						integrationId: (item.label as string) ?? '',
+						name: (item.description as string) ?? (item.label as string) ?? '',
+						status: 'Running',
+					};
+				}
+
+				if (!payload) {
+					return;
+				}
+
+				const panel = TracePanel.getInstance(this.context);
+				panel.openOrReveal(payload);
+				await this.sendCommandTrackingEvent(DEPLOYMENTS_INTEGRATION_TRACE_COMMAND_ID);
 			}),
 		);
 	}

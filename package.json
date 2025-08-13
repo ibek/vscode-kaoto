@@ -203,6 +203,12 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "kaoto.trace.open",
+        "title": "Trace",
+        "category": "Kaoto",
+        "icon": "$(debug)"
+      },
+      {
         "command": "kaoto.deployments.route.start",
         "title": "Start",
         "category": "Kaoto",
@@ -388,6 +394,11 @@
         {
           "command": "kaoto.deployments.logs",
           "group": "inline@2",
+          "when": "view == kaoto.deployments && viewItem == parent-localhost"
+        },
+        {
+          "command": "kaoto.trace.open",
+          "group": "inline@3",
           "when": "view == kaoto.deployments && viewItem == parent-localhost"
         },
         {
