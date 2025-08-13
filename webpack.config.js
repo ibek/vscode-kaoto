@@ -162,6 +162,7 @@ module.exports = async (env) => [
 		target: 'web',
 		entry: {
 			'webview/KaotoEditorEnvelopeApp': './src/webview/KaotoEditorEnvelopeApp.ts',
+			'webview/trace/main': './media/trace/main.tsx',
 		},
 		module: {
 			rules: [

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'none'; img-src %CSP_SOURCE% https:; script-src %CSP_SOURCE% 'nonce-%NONCE%'; style-src %CSP_SOURCE% 'unsafe-inline'; font-src %CSP_SOURCE%;"
+		/>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Trace</title>
+		<link rel="stylesheet" href="%STYLE_URI%" />
+	</head>
+	<body>
+		<div id="root"></div>
+		<script nonce="%NONCE%" src="%SCRIPT_URI%"></script>
+	</body>
+</html>

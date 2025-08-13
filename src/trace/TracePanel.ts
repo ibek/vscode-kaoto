@@ -66,7 +66,7 @@ export class TracePanel {
 			this.panel = undefined;
 		});
 
-		this.updateWebview();
+		this.bootstrapWebview();
 	}
 
 	private updateWebview(): void {
@@ -74,54 +74,51 @@ export class TracePanel {
 			return;
 		}
 
-		const integration = this.currentIntegration;
+		// tell the webview the latest context
+		this.panel.webview.postMessage({ type: 'trace/status', payload: this.currentIntegration });
+	}
 
+	private bootstrapWebview(): void {
+		if (!this.panel) {
+			return;
+		}
+
+		const webview = this.panel.webview;
 		const nonce = getNonce();
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'trace', 'main.js'));
+		const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'trace', 'styles.css'));
+		const htmlPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'trace', 'index.html');
+		const cspSource = webview.cspSource;
 
-		this.panel.webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${this.panel.webview.cspSource} https:; script-src 'nonce-${nonce}'; style-src ${this.panel.webview.cspSource} 'unsafe-inline';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trace</title>
-  <style>
-  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 0; margin: 0; }
-  header { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-bottom: 1px solid var(--vscode-panel-border); }
-  main { padding: .75rem; }
-  .badge { font-size: 11px; padding: 2px 6px; border-radius: 12px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-  </style>
-  </head>
-  <body>
-    <header>
-      <strong>Integration:</strong>
-      <span id="name"></span>
-      <span class="badge" id="status"></span>
-      <span style="opacity:.7">(<code id="id"></code>)</span>
-    </header>
-    <main>
-      <p>This is a placeholder for the Trace panel UI.</p>
-    </main>
-    <script nonce="${nonce}">
-      const vscode = acquireVsCodeApi();
-      const integration = ${JSON.stringify(integration ?? {})};
-      function render(ctx){
-        document.getElementById('name').textContent = ctx?.name ?? '';
-        document.getElementById('status').textContent = ctx?.status ?? '';
-        document.getElementById('id').textContent = ctx?.integrationId ?? '';
-      }
-      render(integration);
-      window.addEventListener('message', event => {
-        if(event?.data?.type === 'setContext'){
-          render(event.data.payload);
-        }
-      });
-    </script>
-  </body>
-  </html>`;
+		vscode.workspace.fs.readFile(htmlPath).then((buf) => {
+			let html = Buffer.from(buf).toString('utf8');
+			html = html.replace(/%SCRIPT_URI%/g, scriptUri.toString());
+			html = html.replace(/%STYLE_URI%/g, styleUri.toString());
+			html = html.replace(/%NONCE%/g, nonce);
+			html = html.replace(/%CSP_SOURCE%/g, cspSource);
+			webview.html = html;
+			// push initial context
+			this.updateWebview();
+		});
 
-		// also post a message so future implementations can handle dynamic updates
-		this.panel.webview.postMessage({ type: 'setContext', payload: integration });
+		// message wiring: webview -> extension
+		webview.onDidReceiveMessage(async (msg) => {
+			const type = msg?.type as string;
+			const payload = msg?.payload as { integrationId?: string } | undefined;
+			switch (type) {
+				case 'trace/start':
+					await vscode.commands.executeCommand('trace/start', payload?.integrationId ?? this.currentIntegration?.integrationId);
+					break;
+				case 'trace/stop':
+					await vscode.commands.executeCommand('trace/stop', payload?.integrationId ?? this.currentIntegration?.integrationId);
+					break;
+				case 'trace/clear':
+					await vscode.commands.executeCommand('trace/clear', payload?.integrationId ?? this.currentIntegration?.integrationId);
+					break;
+				default:
+					break;
+			}
+		});
 	}
 
 	public switchContext(args: TraceOpenArgs): void {
