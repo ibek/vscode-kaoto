@@ -147,6 +147,11 @@ export class TraceManager implements vscode.Disposable {
 
 	private spawnCamelTrace(integrationId: string, action: 'start' | 'stop' | 'dump'): ChildProcessWithoutNullStreams {
 		const args = [`-Dcamel.jbang.version=${this.camelJBangVersion}`, 'camel@apache/camel', 'trace', integrationId, `--action=${action}`];
+		// For dump action, prefer simplified, machine-friendly output
+		if (action === 'dump') {
+			args.push('--pretty=false');
+			args.push('--logging-color=false');
+		}
 		const child = spawn(this.jbangExecutable, args, {
 			env: process.env,
 			// use 'pipe' for stdin/stdout/stderr so the returned type is ChildProcessWithoutNullStreams
